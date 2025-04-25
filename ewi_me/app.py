@@ -4,7 +4,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 st.set_page_config(layout="wide")
-st.title("⚙️ Two-Plane Dynamic Balancing Tool (EWI Edition)")
+st.title("⚙️ Two-Plane Dynamic Balancing Tool (EWI Edition - Updated)")
 
 st.markdown("### 🧾 Input Parameters")
 
@@ -13,19 +13,22 @@ col1, col2 = st.columns(2)
 with col1:
     dA = st.number_input("📏 Khoảng cách từ gối đến mặt phẳng A (mm)", value=100.0)
     dB = st.number_input("📏 Khoảng cách từ gối đến mặt phẳng B (mm)", value=300.0)
-    R_A = st.number_input("🛠️ Bán kính add mass mặt phẳng A (mm)", value=80.0)
-    R_B = st.number_input("🛠️ Bán kính add mass mặt phẳng B (mm)", value=80.0)
+    R_A = st.number_input("🛠️ Bán kính vị trí add mass mặt A (mm)", value=80.0)
+    R_B = st.number_input("🛠️ Bán kính vị trí add mass mặt B (mm)", value=80.0)
     angle_step = st.number_input("🔄 Bội số góc chia vị trí add mass (°)", value=18, step=1)
 
 with col2:
     mA = st.number_input("💣 Khối lượng mất cân bằng mặt phẳng A (g)", value=1.5)
+    rA = st.number_input("📏 Bán kính vị trí mất cân bằng mặt A (mm)", value=80.0)
     angleA = st.number_input("📐 Góc mất cân bằng mặt A (°)", value=30.0)
     mB = st.number_input("💣 Khối lượng mất cân bằng mặt phẳng B (g)", value=1.2)
+    rB = st.number_input("📏 Bán kính vị trí mất cân bằng mặt B (mm)", value=80.0)
     angleB = st.number_input("📐 Góc mất cân bằng mặt B (°)", value=270.0)
     offset_angle = st.number_input("🎯 Offset góc hiệu chỉnh thực tế (°)", value=0.0)
 
-momentA = mA * R_A
-momentB = mB * R_B
+# Moment mất cân bằng đúng theo mass đo được và bán kính vị trí mất cân bằng
+momentA = mA * rA
+momentB = mB * rB
 
 st.markdown("### ⚡ Tính toán moment cân bằng cần add")
 

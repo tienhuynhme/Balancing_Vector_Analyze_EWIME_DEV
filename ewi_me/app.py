@@ -24,18 +24,10 @@ with col2:
     angleB = st.number_input("📐 Góc mất cân bằng mặt B (°)", value=270.0)
     offset_angle = st.number_input("🎯 Offset góc hiệu chỉnh thực tế (°)", value=0.0)
 
-# Quy đổi sang moment (g.mm)
 momentA = mA * R_A
 momentB = mB * R_B
+
 st.markdown("### ⚡ Tính toán moment cân bằng cần add")
-
-# Thiết lập ma trận hệ phương trình tương tác 2 mặt phẳng
-# Theo nguyên lý: dA * FA + dB * FB = 0 (triệt tiêu ngẫu lực)
-# MomentA + Moment từ mass add = 0 (cho từng mặt)
-
-# Hệ phương trình:
-# | dA  dB |   | FA |   =   | -(momentA * sin(angleA_rad) + momentB * sin(angleB_rad)) |
-# | 1    1 |   | FB |       | -(momentA * cos(angleA_rad) + momentB * cos(angleB_rad)) |
 
 angleA_rad = np.deg2rad(angleA)
 angleB_rad = np.deg2rad(angleB)
@@ -43,7 +35,6 @@ angleB_rad = np.deg2rad(angleB)
 Mx = momentA * np.cos(angleA_rad) + momentB * np.cos(angleB_rad)
 My = momentA * np.sin(angleA_rad) + momentB * np.sin(angleB_rad)
 
-# Ma trận hệ
 A_matrix = np.array([[dA, dB],
                      [1, 1]])
 b_vector = np.array([-My, -Mx])
@@ -55,7 +46,8 @@ try:
     st.success(f"🔧 Kết quả moment cần add: FA = {FA:.2f} g.mm, FB = {FB:.2f} g.mm")
 except np.linalg.LinAlgError:
     st.error("❌ Lỗi: Không giải được hệ phương trình (kiểm tra lại dA, dB)")
-  st.markdown("### 🛠️ Phân tách vector thành các thành phần mass theo bội số góc")
+
+st.markdown("### 🛠️ Phân tách vector thành các thành phần mass theo bội số góc")
 
 fixed_mass = st.number_input("⚙️ Fixed mass mỗi cục add (g)", value=0.45)
 max_vectors = st.number_input("🔢 Giới hạn số vector tối đa (0 = không giới hạn)", value=0, step=1)
@@ -64,29 +56,20 @@ def split_vector(moment, radius, angle_step, fixed_mass):
     vectors = []
     remaining_moment = moment
     angle_list = np.arange(0, 360, angle_step)
-
-    # Tính moment từ fixed mass
     fixed_moment = fixed_mass * radius
-
-    # Lặp cho đến khi hết moment hoặc đạt max vectors nếu có giới hạn
     count = 0
     while abs(remaining_moment) >= fixed_moment and (max_vectors == 0 or count < max_vectors):
         angle_idx = count % len(angle_list)
         angle = angle_list[angle_idx]
         vectors.append((fixed_mass, angle))
-        # Moment của thành phần đã add
         add_moment = fixed_mass * radius
-        # Trừ phần moment đã add ra khỏi remaining
         remaining_moment -= np.sign(moment) * add_moment
         count += 1
-
-    # Adaptive mass nếu còn dư
-    if abs(remaining_moment) > 0.01:  # Ngưỡng nhỏ tránh lặp vô hạn
+    if abs(remaining_moment) > 0.01:
         adaptive_mass = abs(remaining_moment) / radius
         if adaptive_mass > 0:
             adaptive_angle = angle_list[count % len(angle_list)]
             vectors.append((adaptive_mass, adaptive_angle))
-
     return vectors
 
 vectors_A = split_vector(FA, R_A, angle_step, fixed_mass)
@@ -97,6 +80,7 @@ st.write(pd.DataFrame(vectors_A, columns=["Mass (g)", "Angle (°)"]))
 
 st.write("### ✅ Thành phần vector mặt B:")
 st.write(pd.DataFrame(vectors_B, columns=["Mass (g)", "Angle (°)"]))
+
 st.markdown("### 📊 Biểu đồ vector các thành phần add mass (có offset góc)")
 
 def plot_vectors(vectors, title, offset, radius):
@@ -115,11 +99,8 @@ with col_plot1:
 with col_plot2:
     st.pyplot(plot_vectors(vectors_B, "Vector Add Mass - Plane B", offset_angle, R_B))
 
-# Prepare export data
 df_A = pd.DataFrame(vectors_A, columns=["Mass (g)", "Angle (°)"])
 df_B = pd.DataFrame(vectors_B, columns=["Mass (g)", "Angle (°)"])
-
-# Combine A and B results
 df_export = pd.concat([df_A.assign(Plane="A"), df_B.assign(Plane="B")])
 
 csv = df_export.to_csv(index=False).encode('utf-8')

@@ -4,7 +4,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 st.set_page_config(layout="wide")
-st.title("⚙️ Two-Plane Dynamic Balancing Tool (EWI Edition - Phase Angle Alignment)")
+st.title("⚙️ Two-Plane Dynamic Balancing Tool (Hybrid Vector + Coupling + Residual Check)")
 
 st.markdown("### 🧾 Input Parameters")
 
@@ -26,18 +26,21 @@ with col2:
     angleB = st.number_input("📐 Góc mất cân bằng mặt B (°)", value=291.0)
     offset_angle = st.number_input("🎯 Offset góc hiệu chỉnh thực tế (°)", value=0.0)
 
+fixed_mass = st.number_input("⚙️ Fixed mass mỗi cục add (g)", value=0.45)
+max_vectors = st.number_input("🔢 Giới hạn số vector tối đa (0 = không giới hạn)", value=0, step=1)
+
 # Moment mất cân bằng
 momentA = mA * rA
 momentB = mB * rB
 
-st.markdown("### ⚡ Tính toán moment cân bằng cần add (solve hệ phương trình)")
-
 angleA_rad = np.deg2rad(angleA)
 angleB_rad = np.deg2rad(angleB)
 
+# Vector tổng unbalance
 Mx = momentA * np.cos(angleA_rad) + momentB * np.cos(angleB_rad)
 My = momentA * np.sin(angleA_rad) + momentB * np.sin(angleB_rad)
 
+# Solve torque + force balance
 A_matrix = np.array([[dA, dB],
                      [1, 1]])
 b_vector = np.array([-My, -Mx])
@@ -50,17 +53,12 @@ try:
 except np.linalg.LinAlgError:
     st.error("❌ Lỗi: Không giải được hệ phương trình (kiểm tra lại dA, dB)")
 
-# ➡️ Tính phase angle của vector cần add
+# Phase align theo vector tổng hệ (not individual plane)
 phase_angle_rad = np.arctan2(My, Mx)
 phase_angle_deg = (np.rad2deg(phase_angle_rad)) % 360
 target_angle = (phase_angle_deg + 180 + offset_angle) % 360
 
-st.markdown(f"### 🎯 Góc align phase angle (ngược hướng mất cân bằng): {target_angle:.2f}°")
-
-st.markdown("### 🛠️ Phân tách vector thành các thành phần mass theo bội số góc (align phase angle)")
-
-fixed_mass = st.number_input("⚙️ Fixed mass mỗi cục add (g)", value=0.45)
-max_vectors = st.number_input("🔢 Giới hạn số vector tối đa (0 = không giới hạn)", value=0, step=1)
+st.markdown(f"### 🎯 Góc align phase angle (ngược hướng mất cân bằng tổng hợp): {target_angle:.2f}°")
 
 def split_vector(moment, radius, angle_step, fixed_mass, target_angle):
     vectors = []
@@ -92,24 +90,45 @@ st.write(pd.DataFrame(vectors_A, columns=["Mass (g)", "Angle (°)"]))
 st.write("### ✅ Thành phần vector mặt B (đã align phase angle):")
 st.write(pd.DataFrame(vectors_B, columns=["Mass (g)", "Angle (°)"]))
 
-st.markdown("### 📊 Biểu đồ vector các thành phần add mass (có offset góc)")
+# Residual calculation (check lại sau add mass)
+def calc_vector_sum(vectors, radius):
+    total_x = sum([mass * radius * np.cos(np.deg2rad(angle)) for mass, angle in vectors])
+    total_y = sum([mass * radius * np.sin(np.deg2rad(angle)) for mass, angle in vectors])
+    return total_x, total_y
 
-def plot_vectors(vectors, title, offset, radius):
+add_Mx_A, add_My_A = calc_vector_sum(vectors_A, R_A)
+add_Mx_B, add_My_B = calc_vector_sum(vectors_B, R_B)
+
+residual_Mx = Mx + add_Mx_A + add_Mx_B
+residual_My = My + add_My_A + add_My_B
+residual_magnitude = np.sqrt(residual_Mx**2 + residual_My**2)
+residual_angle = (np.rad2deg(np.arctan2(residual_My, residual_Mx))) % 360
+
+st.markdown(f"### ⚠️ Residual moment sau khi add mass: {residual_magnitude:.2f} g.mm @ {residual_angle:.2f}°")
+
+# Plot vector
+st.markdown("### 📊 Biểu đồ vector các thành phần add mass và residual")
+
+def plot_vectors(vectors, title, offset, radius, residual=None):
     fig, ax = plt.subplots(figsize=(5, 5), subplot_kw={'projection': 'polar'})
     for mass, angle in vectors:
         angle_rad = np.deg2rad(angle + offset)
         moment = mass * radius
-        ax.arrow(angle_rad, 0, 0, moment,
-                 width=0.02, color='b', alpha=0.7)
+        ax.arrow(angle_rad, 0, 0, moment, width=0.02, color='b', alpha=0.7)
+    if residual:
+        res_angle_rad = np.deg2rad(residual[1] + offset)
+        ax.arrow(res_angle_rad, 0, 0, residual[0], width=0.03, color='r', alpha=0.9, label='Residual')
+        ax.legend(loc='upper right')
     ax.set_title(title)
     return fig
 
 col_plot1, col_plot2 = st.columns(2)
 with col_plot1:
-    st.pyplot(plot_vectors(vectors_A, "Vector Add Mass - Plane A", offset_angle, R_A))
+    st.pyplot(plot_vectors(vectors_A, "Vector Add Mass - Plane A", offset_angle, R_A, (residual_magnitude, residual_angle)))
 with col_plot2:
-    st.pyplot(plot_vectors(vectors_B, "Vector Add Mass - Plane B", offset_angle, R_B))
+    st.pyplot(plot_vectors(vectors_B, "Vector Add Mass - Plane B", offset_angle, R_B, (residual_magnitude, residual_angle)))
 
+# Export
 df_A = pd.DataFrame(vectors_A, columns=["Mass (g)", "Angle (°)"])
 df_B = pd.DataFrame(vectors_B, columns=["Mass (g)", "Angle (°)"])
 df_export = pd.concat([df_A.assign(Plane="A"), df_B.assign(Plane="B")])
